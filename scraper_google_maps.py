@@ -36,7 +36,8 @@ UBICACIONES = [
 ]
 
 MAX_RESULTADOS_POR_BUSQUEDA = 30
-MAX_SCROLLS_POR_BUSQUEDA = 8
+MAX_SCROLLS_POR_BUSQUEDA = 20
+MAX_SCROLLS_SIN_NUEVOS = 5
 AUTOSAVE_CADA = 5
 MODO_HEADLESS = False
 CHROME_VERSION_MAIN = None  # Ejemplo: 149. Dejalo en None para autodetectar.
@@ -285,7 +286,7 @@ def recolectar_urls_resultados(driver, giro: str, ubicacion: str):
 
         if len(resultados) == antes:
             scrolls_sin_nuevos += 1
-            if scrolls_sin_nuevos >= 2:
+            if scrolls_sin_nuevos >= MAX_SCROLLS_SIN_NUEVOS:
                 break
         else:
             scrolls_sin_nuevos = 0
@@ -569,8 +570,18 @@ def guardar_resultados(registros):
     if not registros:
         return
 
-    df = pd.DataFrame(registros)
-    df = df.drop_duplicates(subset=["maps_url"], keep="first")
+    df_nuevo = pd.DataFrame(registros)
+    if RUTA_RESULTADOS.exists():
+        try:
+            df_anterior = pd.read_excel(RUTA_RESULTADOS)
+            df = pd.concat([df_anterior, df_nuevo], ignore_index=True)
+        except Exception as error:
+            print(f"Aviso: no se pudo leer el Excel anterior: {error}")
+            df = df_nuevo
+    else:
+        df = df_nuevo
+
+    df = df.drop_duplicates(subset=["maps_url"], keep="last")
     df.to_excel(RUTA_RESULTADOS, index=False)
 
     leads = df[df["maps_lead_sin_web"] == True].copy()
@@ -659,6 +670,12 @@ def main():
         print(f"\nFichas unicas detectadas: {total_unicos}")
         print(f"Fichas omitidas por historial: {omitidos}")
         print(f"Fichas nuevas por revisar: {len(candidatos)}")
+        if omitidos and len(candidatos) <= 1:
+            print(
+                "Aviso: Google Maps devolvio casi la misma lista de la ejecucion "
+                "anterior. Para obtener mas prospectos prueba una zona mas especifica, "
+                "otro giro relacionado o aumenta --max."
+            )
 
         for idx, candidato in enumerate(candidatos, start=1):
             try:

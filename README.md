@@ -61,6 +61,21 @@ python scraper_google_maps.py --giro "dentistas" --ubicacion "Monterrey, Nuevo L
 Puedes repetir `--giro` y `--ubicacion` para combinar varias búsquedas. Agrega
 `--headless` si quieres ejecutar Chrome sin una ventana visible.
 
+El scraper conserva `results/maps_urls_procesadas.csv`. Al repetir exactamente la misma
+búsqueda, omite los negocios ya procesados y trabaja únicamente con los nuevos que Google
+Maps muestre. Si la plataforma vuelve a entregar la misma lista, divide la ciudad en zonas:
+
+```powershell
+python scraper_google_maps.py --giro "dentistas" `
+  --ubicacion "Polanco, Ciudad de México" `
+  --ubicacion "Roma Norte, Ciudad de México" `
+  --ubicacion "Coyoacán, Ciudad de México" `
+  --max 50
+```
+
+Los archivos Excel son acumulativos: las ejecuciones nuevas se agregan y las URLs repetidas
+se actualizan sin duplicarse.
+
 ## Resultados
 
 El programa crea la carpeta `results/` y guarda:
