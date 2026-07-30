@@ -15,6 +15,18 @@ web. No envía mensajes, no valida WhatsApp, no compra datos y no automatiza cam
 
 ## Instalación
 
+### Instalación automática en Windows
+
+1. Descarga y extrae el ZIP del proyecto.
+2. Haz doble clic en `INSTALAR_WINDOWS.bat`.
+3. Acepta los avisos de instalación.
+4. Cuando termine, abre `EJECUTAR_SCRAPER.bat`.
+
+El instalador utiliza `winget` para preparar Python 3.13, Google Chrome y Visual Studio Code
+cuando no estén instalados. Después crea `.venv` e instala las dependencias de Python.
+
+### Instalación manual
+
 ```bash
 git clone https://github.com/ramonsegh/google-maps-prospect-scraper.git
 cd google-maps-prospect-scraper
