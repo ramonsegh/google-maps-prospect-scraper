@@ -35,9 +35,8 @@ UBICACIONES = [
     "Ciudad de México, México",
 ]
 
-MAX_RESULTADOS_POR_BUSQUEDA = 30
-MAX_SCROLLS_POR_BUSQUEDA = 20
-MAX_SCROLLS_SIN_NUEVOS = 5
+MAX_RESULTADOS_POR_BUSQUEDA = 100
+MAX_SCROLLS_POR_BUSQUEDA = 8
 AUTOSAVE_CADA = 5
 MODO_HEADLESS = False
 CHROME_VERSION_MAIN = None  # Ejemplo: 149. Dejalo en None para autodetectar.
@@ -47,7 +46,8 @@ RESENAS_BUEN_PERFIL = 20
 RATING_PERFIL_REGULAR = 3.8
 RESENAS_PERFIL_REGULAR = 5
 
-DIRECTORIO_RESULTADOS = Path("results")
+DIRECTORIO_PROYECTO = Path(__file__).resolve().parent
+DIRECTORIO_RESULTADOS = DIRECTORIO_PROYECTO / "results"
 RUTA_RESULTADOS = DIRECTORIO_RESULTADOS / "maps_resultados_completo.xlsx"
 RUTA_LEADS_SIN_WEB = DIRECTORIO_RESULTADOS / "leads_maps_sin_web.xlsx"
 RUTA_HISTORIAL_PROCESADOS = DIRECTORIO_RESULTADOS / "maps_urls_procesadas.csv"
@@ -286,7 +286,7 @@ def recolectar_urls_resultados(driver, giro: str, ubicacion: str):
 
         if len(resultados) == antes:
             scrolls_sin_nuevos += 1
-            if scrolls_sin_nuevos >= MAX_SCROLLS_SIN_NUEVOS:
+            if scrolls_sin_nuevos >= 2:
                 break
         else:
             scrolls_sin_nuevos = 0
@@ -655,6 +655,7 @@ def main():
         print(f"URLs ya procesadas en historial: {len(urls_procesadas)}")
 
     driver = crear_driver()
+    driver.set_page_load_timeout(30)
     registros = []
     historial_pendiente = []
 
@@ -673,8 +674,7 @@ def main():
         if omitidos and len(candidatos) <= 1:
             print(
                 "Aviso: Google Maps devolvio casi la misma lista de la ejecucion "
-                "anterior. Para obtener mas prospectos prueba una zona mas especifica, "
-                "otro giro relacionado o aumenta --max."
+                "anterior. Usa varias ubicaciones, como hacia el scraper original."
             )
 
         for idx, candidato in enumerate(candidatos, start=1):
@@ -716,8 +716,10 @@ def main():
     guardar_historial_procesados(historial_pendiente)
     leads = sum(1 for r in registros if r.get("maps_lead_sin_web"))
     print("\nProceso terminado.")
-    print(f"Registros completos: {len(registros)} -> {RUTA_RESULTADOS}")
-    print(f"Leads sin web: {leads} -> {RUTA_LEADS_SIN_WEB}")
+    print(f"Registros revisados en esta ejecucion: {len(registros)}")
+    print(f"Resultados acumulados: {RUTA_RESULTADOS}")
+    print(f"Leads sin web encontrados en esta ejecucion: {leads}")
+    print(f"Leads acumulados: {RUTA_LEADS_SIN_WEB}")
     print(f"Historial actualizado: {RUTA_HISTORIAL_PROCESADOS}")
 
 
