@@ -7,6 +7,18 @@ teléfono, sitio web, calificación y número de reseñas, y entrega los resulta
 También crea una lista separada de negocios con un perfil razonable que no muestran sitio
 web. No envía mensajes, no valida WhatsApp, no compra datos y no automatiza campañas.
 
+## Descarga rápida
+
+Descarga la versión preparada para Windows desde:
+
+https://github.com/ramonsegh/google-maps-prospect-scraper/releases/latest
+
+Después:
+
+1. Extrae completamente el ZIP.
+2. Ejecuta `INSTALAR_WINDOWS.bat`.
+3. Al terminar, abre `EJECUTAR_SCRAPER.bat`.
+
 ## Requisitos
 
 - Python 3.10 o superior
