@@ -17,7 +17,10 @@ echo ============================================================
 echo.
 set /p "GIRO=Escribe el giro o tipo de negocio: "
 set /p "UBICACION=Escribe la ciudad o ubicacion: "
-set /p "MAXIMO=Numero maximo de resultados [20]: "
+set /p "MAXIMO=Numero maximo de resultados [100]: "
+echo La calificacion minima debe estar entre 0 y 5 y puede tener decimales.
+set /p "CALIFICACION_MINIMA=Calificacion minima [0]: "
+set /p "MIN_CALIFICACIONES=Minimo de calificaciones o resenas [0]: "
 
 if not defined GIRO (
     echo Debes escribir un giro.
@@ -29,11 +32,13 @@ if not defined UBICACION (
     pause
     exit /b 1
 )
-if not defined MAXIMO set "MAXIMO=20"
+if not defined MAXIMO set "MAXIMO=100"
+if not defined CALIFICACION_MINIMA set "CALIFICACION_MINIMA=0"
+if not defined MIN_CALIFICACIONES set "MIN_CALIFICACIONES=0"
 
 echo.
 echo Iniciando busqueda...
-".venv\Scripts\python.exe" "scraper_google_maps.py" --giro "%GIRO%" --ubicacion "%UBICACION%" --max "%MAXIMO%"
+".venv\Scripts\python.exe" "scraper_google_maps.py" --giro "%GIRO%" --ubicacion "%UBICACION%" --max "%MAXIMO%" --calificacion-minima "%CALIFICACION_MINIMA%" --min-calificaciones "%MIN_CALIFICACIONES%"
 
 if errorlevel 1 (
     echo.
@@ -43,4 +48,3 @@ if errorlevel 1 (
     echo Proceso terminado. Consulta la carpeta results.
 )
 pause
-

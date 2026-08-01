@@ -95,7 +95,7 @@ echo.
 echo Para buscar prospectos abre EJECUTAR_SCRAPER.bat.
 echo Tambien puedes usar este comando:
 echo.
-echo .venv\Scripts\python.exe scraper_google_maps.py --giro "dentistas" --ubicacion "Monterrey, Nuevo Leon" --max 20
+echo .venv\Scripts\python.exe scraper_google_maps.py --giro "dentistas" --ubicacion "Monterrey, Nuevo Leon" --max 100 --calificacion-minima 4.5 --min-calificaciones 20
 echo.
 pause
 exit /b 0

@@ -36,10 +36,13 @@ UBICACIONES = [
 ]
 
 MAX_RESULTADOS_POR_BUSQUEDA = 100
-MAX_SCROLLS_POR_BUSQUEDA = 8
+MAX_SCROLLS_POR_BUSQUEDA = 20
+MAX_SCROLLS_SIN_NUEVOS = 4
 AUTOSAVE_CADA = 5
 MODO_HEADLESS = False
 CHROME_VERSION_MAIN = None  # Ejemplo: 149. Dejalo en None para autodetectar.
+CALIFICACION_MINIMA = 0.0
+RESENAS_MINIMAS = 0
 
 RATING_BUEN_PERFIL = 4.3
 RESENAS_BUEN_PERFIL = 20
@@ -49,7 +52,6 @@ RESENAS_PERFIL_REGULAR = 5
 DIRECTORIO_PROYECTO = Path(__file__).resolve().parent
 DIRECTORIO_RESULTADOS = DIRECTORIO_PROYECTO / "results"
 RUTA_RESULTADOS = DIRECTORIO_RESULTADOS / "maps_resultados_completo.xlsx"
-RUTA_LEADS_SIN_WEB = DIRECTORIO_RESULTADOS / "leads_maps_sin_web.xlsx"
 RUTA_HISTORIAL_PROCESADOS = DIRECTORIO_RESULTADOS / "maps_urls_procesadas.csv"
 # ------------------------------------
 
@@ -286,7 +288,7 @@ def recolectar_urls_resultados(driver, giro: str, ubicacion: str):
 
         if len(resultados) == antes:
             scrolls_sin_nuevos += 1
-            if scrolls_sin_nuevos >= 2:
+            if scrolls_sin_nuevos >= MAX_SCROLLS_SIN_NUEVOS:
                 break
         else:
             scrolls_sin_nuevos = 0
@@ -387,7 +389,7 @@ def buscar_valor_contacto(driver, selectores):
     return ""
 
 
-def extraer_ficha(driver, base: dict) -> dict:
+def extraer_ficha(driver, base: dict, calificacion_minima: float, resenas_minimas: int) -> dict:
     driver.get(base["maps_url"])
     time.sleep(3)
 
@@ -431,17 +433,22 @@ def extraer_ficha(driver, base: dict) -> dict:
     rating, resenas = extraer_rating_resenas(texto_pagina)
     cerrado = bool(
         re.search(
-            r"cerrado permanentemente|permanently closed",
+            r"cerrado (?:temporalmente|permanentemente|definitivamente)"
+            r"|temporarily closed|permanently closed"
+            r"|ya no existe|no longer exists|fuera de servicio|out of business",
             normalizar(texto_pagina),
             flags=re.IGNORECASE,
         )
     )
     perfil = clasificar_perfil(rating, resenas)
     tiene_web = bool(website)
-    lead_sin_web = (not cerrado) and (not tiene_web) and perfil in {
-        "BUEN_PERFIL",
-        "PERFIL_REGULAR",
-    }
+    cumple_filtros = (
+        not cerrado
+        and rating is not None
+        and resenas is not None
+        and rating >= calificacion_minima
+        and resenas >= resenas_minimas
+    )
 
     return {
         **base,
@@ -455,7 +462,8 @@ def extraer_ficha(driver, base: dict) -> dict:
         "maps_resenas": resenas,
         "maps_perfil_calidad": perfil,
         "maps_cerrado": cerrado,
-        "maps_lead_sin_web": lead_sin_web,
+        "maps_activo": not cerrado,
+        "maps_cumple_filtros": cumple_filtros,
         "fecha_scrapeo": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
 
@@ -522,9 +530,26 @@ def filtrar_urls_ya_procesadas(registros, urls_procesadas):
     return nuevos, omitidos
 
 
+def guardar_dataframe_con_reintento(df, ruta: Path, formato: str) -> bool:
+    while True:
+        try:
+            if formato == "excel":
+                df.to_excel(ruta, index=False)
+            else:
+                df.to_csv(ruta, index=False, encoding="utf-8-sig")
+            return True
+        except PermissionError:
+            print(f"\nNo se puede guardar el archivo porque esta abierto o bloqueado:\n{ruta}")
+            print("Cierra el archivo en Excel y pulsa ENTER para volver a intentar.")
+            respuesta = input("Escribe T y pulsa ENTER para terminar la ejecucion: ").strip().lower()
+            if respuesta == "t":
+                print("Ejecucion terminada por el usuario. No se pudo actualizar ese archivo.")
+                return False
+
+
 def guardar_historial_procesados(registros):
     if not registros:
-        return
+        return True
 
     columnas = [
         "maps_url_canonica",
@@ -538,7 +563,9 @@ def guardar_historial_procesados(registros):
         "maps_rating",
         "maps_resenas",
         "maps_perfil_calidad",
-        "maps_lead_sin_web",
+        "maps_cerrado",
+        "maps_activo",
+        "maps_cumple_filtros",
         "fecha_scrapeo",
     ]
 
@@ -552,7 +579,7 @@ def guardar_historial_procesados(registros):
         filas.append(fila)
 
     if not filas:
-        return
+        return True
 
     df_nuevo = pd.DataFrame(filas, columns=columnas)
     if RUTA_HISTORIAL_PROCESADOS.exists():
@@ -563,49 +590,71 @@ def guardar_historial_procesados(registros):
             pass
 
     df_nuevo = df_nuevo.drop_duplicates(subset=["maps_url_canonica"], keep="last")
-    df_nuevo.to_csv(RUTA_HISTORIAL_PROCESADOS, index=False, encoding="utf-8-sig")
+    return guardar_dataframe_con_reintento(
+        df_nuevo, RUTA_HISTORIAL_PROCESADOS, "csv"
+    )
 
 
-def guardar_resultados(registros):
-    if not registros:
-        return
+def guardar_resultados(registros, calificacion_minima, resenas_minimas):
+    if not registros and not RUTA_HISTORIAL_PROCESADOS.exists() and not RUTA_RESULTADOS.exists():
+        return True
 
-    df_nuevo = pd.DataFrame(registros)
+    bloques = []
+    if RUTA_HISTORIAL_PROCESADOS.exists():
+        try:
+            bloques.append(pd.read_csv(RUTA_HISTORIAL_PROCESADOS))
+        except Exception:
+            pass
     if RUTA_RESULTADOS.exists():
         try:
-            df_anterior = pd.read_excel(RUTA_RESULTADOS)
-            df = pd.concat([df_anterior, df_nuevo], ignore_index=True)
+            bloques.append(pd.read_excel(RUTA_RESULTADOS))
         except Exception as error:
             print(f"Aviso: no se pudo leer el Excel anterior: {error}")
-            df = df_nuevo
-    else:
-        df = df_nuevo
+    bloques.append(pd.DataFrame(registros))
+    df = pd.concat(bloques, ignore_index=True)
 
-    df = df.drop_duplicates(subset=["maps_url"], keep="last")
-    df.to_excel(RUTA_RESULTADOS, index=False)
+    df["_url_canonica"] = df["maps_url"].map(url_canonica_maps)
+    df = df.drop_duplicates(subset=["_url_canonica"], keep="last")
+    ratings = pd.to_numeric(df.get("maps_rating"), errors="coerce")
+    resenas = pd.to_numeric(df.get("maps_resenas"), errors="coerce")
+    cerrados = df.get("maps_cerrado", False)
+    if not isinstance(cerrados, pd.Series):
+        cerrados = pd.Series(False, index=df.index)
+    cerrados = cerrados.astype(str).str.lower().isin({"true", "1", "yes"})
+    df = df[(~cerrados) & (ratings >= calificacion_minima) & (resenas >= resenas_minimas)]
+    df = df.drop(columns=["_url_canonica", "maps_url_canonica"], errors="ignore")
+    return guardar_dataframe_con_reintento(df, RUTA_RESULTADOS, "excel")
 
-    leads = df[df["maps_lead_sin_web"] == True].copy()
-    orden_leads = [
-        "giro_busqueda",
-        "ubicacion_busqueda",
-        "maps_nombre",
-        "maps_telefono",
-        "telefono_10_digitos",
-        "maps_rating",
-        "maps_resenas",
-        "maps_perfil_calidad",
-        "maps_direccion",
-        "maps_url",
-        "maps_website",
-        "fecha_scrapeo",
-    ]
-    columnas = [col for col in orden_leads if col in leads.columns]
-    leads[columnas].to_excel(RUTA_LEADS_SIN_WEB, index=False)
+
+def calificacion_valida(valor: str) -> float:
+    try:
+        numero = float(valor.replace(",", "."))
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "la calificacion minima debe ser un numero entre 0 y 5; por ejemplo 4.5"
+        ) from error
+    if not 0 <= numero <= 5:
+        raise argparse.ArgumentTypeError("la calificacion minima solo puede estar entre 0 y 5")
+    return numero
+
+
+def entero_no_negativo(valor: str) -> int:
+    try:
+        numero = int(valor)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "el minimo de calificaciones debe ser un entero igual o mayor que 0"
+        ) from error
+    if numero < 0:
+        raise argparse.ArgumentTypeError(
+            "el minimo de calificaciones debe ser igual o mayor que 0"
+        )
+    return numero
 
 
 def parsear_args():
     parser = argparse.ArgumentParser(
-        description="Scraper directo de Google Maps para detectar negocios con buen perfil y sin web."
+        description="Scraper de Google Maps para encontrar negocios activos segun su calificacion."
     )
     parser.add_argument(
         "--ubicacion",
@@ -628,6 +677,18 @@ def parsear_args():
         action="store_true",
         help="Corre Chrome sin ventana visible.",
     )
+    parser.add_argument(
+        "--calificacion-minima",
+        type=calificacion_valida,
+        default=CALIFICACION_MINIMA,
+        help="Calificacion minima entre 0 y 5. Admite decimales, por ejemplo 4.5.",
+    )
+    parser.add_argument(
+        "--min-calificaciones",
+        type=entero_no_negativo,
+        default=RESENAS_MINIMAS,
+        help="Cantidad minima de calificaciones o resenas, igual o mayor que 0.",
+    )
     return parser.parse_args()
 
 
@@ -646,8 +707,9 @@ def main():
     print("Scraper directo Google Maps")
     print("Giros:", ", ".join(giros))
     print("Ubicaciones:", ", ".join(ubicaciones))
+    print(f"Calificacion minima: {args.calificacion_minima}")
+    print(f"Minimo de calificaciones: {args.min_calificaciones}")
     print("Salida completa:", RUTA_RESULTADOS)
-    print("Leads sin web:", RUTA_LEADS_SIN_WEB)
     print("Historial procesados:", RUTA_HISTORIAL_PROCESADOS)
 
     urls_procesadas = cargar_urls_procesadas()
@@ -658,6 +720,7 @@ def main():
     driver.set_page_load_timeout(30)
     registros = []
     historial_pendiente = []
+    terminar_solicitado = False
 
     try:
         candidatos = []
@@ -679,28 +742,37 @@ def main():
 
         for idx, candidato in enumerate(candidatos, start=1):
             try:
-                ficha = extraer_ficha(driver, candidato)
+                ficha = extraer_ficha(
+                    driver, candidato, args.calificacion_minima, args.min_calificaciones
+                )
                 registros.append(ficha)
                 historial_pendiente.append(ficha)
                 urls_procesadas.add(url_canonica_maps(ficha.get("maps_url", "")))
-                etiqueta = "LEAD SIN WEB" if ficha["maps_lead_sin_web"] else "descartado"
+                etiqueta = "ACEPTADO" if ficha["maps_cumple_filtros"] else "descartado"
                 print(
                     f"[{idx}/{len(candidatos)}] {etiqueta}: "
                     f"{ficha['maps_nombre']} | {ficha['maps_rating']} "
-                    f"({ficha['maps_resenas']}) | web={ficha['maps_tiene_web']}"
+                    f"({ficha['maps_resenas']} calificaciones) | activo={ficha['maps_activo']}"
                 )
             except Exception as error:
                 registros.append({
                     **candidato,
                     "maps_error": str(error),
-                    "maps_lead_sin_web": False,
+                    "maps_cumple_filtros": False,
                     "fecha_scrapeo": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 })
                 print(f"[{idx}/{len(candidatos)}] Error revisando ficha: {error}")
 
             if idx % AUTOSAVE_CADA == 0:
-                guardar_resultados(registros)
-                guardar_historial_procesados(historial_pendiente)
+                if not guardar_resultados(
+                    registros, args.calificacion_minima, args.min_calificaciones
+                ):
+                    guardar_historial_procesados(historial_pendiente)
+                    terminar_solicitado = True
+                    break
+                if not guardar_historial_procesados(historial_pendiente):
+                    terminar_solicitado = True
+                    break
                 historial_pendiente = []
                 print("Autosave listo.")
 
@@ -712,14 +784,23 @@ def main():
         except Exception:
             pass
 
-    guardar_resultados(registros)
-    guardar_historial_procesados(historial_pendiente)
-    leads = sum(1 for r in registros if r.get("maps_lead_sin_web"))
+    if terminar_solicitado:
+        print("\nProceso detenido de forma segura por solicitud del usuario.")
+        return
+
+    resultado_guardado = guardar_resultados(
+        registros, args.calificacion_minima, args.min_calificaciones
+    )
+    historial_guardado = guardar_historial_procesados(historial_pendiente)
+    if not resultado_guardado or not historial_guardado:
+        print("\nProceso detenido de forma segura por solicitud del usuario.")
+        return
+
+    aceptados = sum(1 for r in registros if r.get("maps_cumple_filtros"))
     print("\nProceso terminado.")
     print(f"Registros revisados en esta ejecucion: {len(registros)}")
     print(f"Resultados acumulados: {RUTA_RESULTADOS}")
-    print(f"Leads sin web encontrados en esta ejecucion: {leads}")
-    print(f"Leads acumulados: {RUTA_LEADS_SIN_WEB}")
+    print(f"Negocios que cumplen los filtros en esta ejecucion: {aceptados}")
     print(f"Historial actualizado: {RUTA_HISTORIAL_PROCESADOS}")
 
 

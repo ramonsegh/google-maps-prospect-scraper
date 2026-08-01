@@ -4,8 +4,9 @@ Herramienta gratuita para recopilar negocios potenciales y crear listas de prosp
 
 Busca negocios públicos en Google Maps por giro y ubicación, recopila nombre, dirección,
 teléfono, sitio web, calificación y número de reseñas, y entrega los resultados en Excel.
-También crea una lista separada de negocios con un perfil razonable que no muestran sitio
-web. No envía mensajes, no valida WhatsApp, no compra datos y no automatiza campañas.
+Permite elegir una calificación mínima y una cantidad mínima de reseñas, y excluye los
+negocios que Google Maps marca como cerrados. No envía mensajes, no valida WhatsApp,
+no compra datos y no automatiza campañas.
 
 ## Descarga rápida
 
@@ -67,7 +68,7 @@ puedes duplicar `.env.example` manualmente y renombrar la copia como `.env`.
 ## Uso
 
 ```bash
-python scraper_google_maps.py --giro "dentistas" --ubicacion "Monterrey, Nuevo León" --max 20
+python scraper_google_maps.py --giro "dentistas" --ubicacion "Monterrey, Nuevo León" --max 100 --calificacion-minima 4.5 --min-calificaciones 20
 ```
 
 Puedes repetir `--giro` y `--ubicacion` para combinar varias búsquedas. Agrega
@@ -92,8 +93,7 @@ se actualizan sin duplicarse.
 
 El programa crea la carpeta `results/` y guarda:
 
-- `maps_resultados_completo.xlsx`: todos los negocios revisados.
-- `leads_maps_sin_web.xlsx`: negocios activos, sin web y con perfil bueno o regular.
+- `maps_resultados_completo.xlsx`: negocios activos que cumplen los filtros elegidos.
 - `maps_urls_procesadas.csv`: historial local para evitar procesar dos veces una ficha.
 
 Las columnas incluyen giro y ubicación, nombre, dirección, teléfono, URL de Maps, sitio
